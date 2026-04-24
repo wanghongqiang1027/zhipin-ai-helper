@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "智聘 AI 助手",
+  "version": "2.0.0",
+  "description": "在浏览器插件中完成简历上传、AI 整理、岗位匹配与自动沟通辅助。",
+  "permissions": ["tabs", "storage"],
+  "host_permissions": ["https://www.zhipin.com/*", "https://api.deepseek.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "智聘 AI 助手"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.zhipin.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["https://www.zhipin.com/*"]
+    }
+  ]
+}

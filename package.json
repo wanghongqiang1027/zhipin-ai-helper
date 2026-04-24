@@ -1,0 +1,28 @@
+{
+  "name": "zhipin-ai-helper",
+  "version": "2.0.0",
+  "private": true,
+  "description": "浏览器插件：在职位列表页完成简历上传、AI 整理、岗位匹配与自动沟通辅助。",
+  "author": "wanghongqiang",
+  "license": "MIT",
+  "homepage": "https://github.com/wanghongqiang/zhipin-ai-helper#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wanghongqiang/zhipin-ai-helper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wanghongqiang/zhipin-ai-helper/issues"
+  },
+  "keywords": [
+    "browser-extension",
+    "chrome-extension",
+    "job-hunting",
+    "ai-agent",
+    "resume",
+    "deepseek"
+  ],
+  "scripts": {
+    "build": "node scripts/build-extension.mjs",
+    "package": "node scripts/build-extension.mjs --zip"
+  }
+}
