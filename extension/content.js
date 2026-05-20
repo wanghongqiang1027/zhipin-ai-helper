@@ -70,6 +70,92 @@ function normalizeSearchQueryText(value) {
   return trimAutomationValue(value).replace(/\s+/g, " ");
 }
 
+// 站点 CSP 禁止 `javascript:` URL 执行：直接对 <a href="javascript:..."> 调用 .click()
+// 会触发"Running the JavaScript URL violates CSP"违规（事件本身仍会派发，但日志被噪音淹没）。
+// 这里临时摘掉 href 再 click()，保持 isTrusted=true，结束后恢复原 href。
+function safeClick(el) {
+  let originalHref = null;
+  let stripped = false;
+  try {
+    if (el && el.tagName === "A" && typeof el.getAttribute === "function") {
+      const hrefAttr = el.getAttribute("href");
+      if (hrefAttr && /^\s*javascript:/i.test(hrefAttr)) {
+        originalHref = hrefAttr;
+        stripped = true;
+        el.removeAttribute("href");
+      }
+    }
+    el.click();
+  } finally {
+    if (stripped) {
+      try {
+        el.setAttribute("href", originalHref);
+      } catch (_) {}
+    }
+  }
+}
+
+// 处理 Boss 在点击「立即沟通」后弹出的默认招呼语对话框：
+// 弹框形如：标题「已向BOSS发送消息」+ 提示「如需修改打招呼内容…」+ 按钮「留在此页」「继续沟通」。
+// 我们要自动点击「继续沟通」，让默认招呼语先发出去，进入会话页后再继续发 AI 编写的消息。
+let __bossGreetingDialogTimer = null;
+
+function findBossGreetingDialogContinueBtn() {
+  const candidates = document.querySelectorAll("button, a, span, div");
+  for (const btn of candidates) {
+    if (!btn.isConnected) continue;
+    const txt = (btn.innerText || btn.textContent || "").trim();
+    if (txt !== "继续沟通") continue;
+    // 避免命中含按钮的大容器，仅认子节点很少的叶子级元素
+    if (btn.children && btn.children.length > 1) continue;
+    // 必须存在弹框上下文（独有的标题/提示文本之一）
+    let p = btn.parentElement;
+    let depth = 0;
+    while (p && depth < 12) {
+      const t = p.innerText || p.textContent || "";
+      if (/已向\s*BOSS\s*发送消息|如需修改打招呼内容/i.test(t)) {
+        return btn;
+      }
+      p = p.parentElement;
+      depth += 1;
+    }
+  }
+  return null;
+}
+
+function clearBossGreetingDialogWatcher() {
+  if (__bossGreetingDialogTimer) {
+    clearInterval(__bossGreetingDialogTimer);
+    __bossGreetingDialogTimer = null;
+  }
+}
+
+function startBossGreetingDialogWatcher() {
+  clearBossGreetingDialogWatcher();
+  const startedAt = Date.now();
+  const MAX_DURATION_MS = 12000;
+  const INTERVAL_MS = 500;
+  __bossGreetingDialogTimer = setInterval(() => {
+    try {
+      const btn = findBossGreetingDialogContinueBtn();
+      if (btn) {
+        logFromContent(
+          `[默认招呼语弹框] 检测到弹框，自动点击「继续沟通」(tag=${btn.tagName})`
+        );
+        safeClick(btn);
+        clearBossGreetingDialogWatcher();
+        return;
+      }
+      if (Date.now() - startedAt > MAX_DURATION_MS) {
+        clearBossGreetingDialogWatcher();
+      }
+    } catch (e) {
+      logFromContent("[默认招呼语弹框] watcher 出错：" + e);
+      clearBossGreetingDialogWatcher();
+    }
+  }, INTERVAL_MS);
+}
+
 function runtimeSendMessageFromContent(message) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(message, (response) => {
@@ -2187,7 +2273,9 @@ function startCrawlingCurrentCityFromList() {
                         `[chatBtn] 第 ${tries} 次轮询找到按钮："${(chatBtn.innerText || chatBtn.textContent || "").trim()}"，` +
                         `tag=${chatBtn.tagName}，href=${chatBtn.href || "无"}，disabled=${chatBtn.disabled}，class="${chatBtn.className}"，点击中...`
                       );
-                      chatBtn.click();
+                      safeClick(chatBtn);
+                      // 「立即沟通」点击后 Boss 可能弹出默认招呼语对话框，启动 watcher 自动点「继续沟通」
+                      startBossGreetingDialogWatcher();
                       logFromContent("[chatBtn] click() 已调用，已停止所有定时器，等待新会话页载入。");
                       clearInterval(timer);
                       return;
